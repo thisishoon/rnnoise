@@ -43,24 +43,24 @@ int main(int argc, char **argv) {
   RNNModel *model = NULL;
   DenoiseState **sts;
   float max_attenuation;
-  if (argc < 4) {
-    fprintf(stderr, "usage: %s <sample rate> <channels> <max attenuation dB> [model]\n", argv[0]);
+  FILE *f1, *fout;
+
+  if (argc!=5) {
+    fprintf(stderr, "usage: %s <channel> <max_attenuation> <input> <output>\n", argv[0]);
     return 1;
   }
-
-  sample_rate = atoi(argv[1]);
-  if (sample_rate <= 0) sample_rate = 48000;
-  channels = atoi(argv[2]);
+  
+  sample_rate = 48000;
+  channels = atoi(argv[1]);
   if (channels < 1) channels = 1;
-  max_attenuation = pow(10, -atof(argv[3])/10);
+  max_attenuation = pow(10, -atof(argv[2])/10);
 
-  if (argc >= 5) {
-      model = rnnoise_get_model(argv[4]);
-      if (!model) {
-          fprintf(stderr, "Model not found!\n");
-          return 1;
-      }
-  }
+  f1 = fopen(argv[3], "r");
+  short temp[44];
+  fread(temp, sizeof(char), 44, f1);
+  fout = fopen(argv[4], "w");
+  fwrite(temp, sizeof(char), 44, fout);
+
 
   sts = malloc(channels * sizeof(DenoiseState *));
   if (!sts) {
@@ -72,15 +72,17 @@ int main(int argc, char **argv) {
       perror("malloc");
       return 1;
   }
+
+
   for (i = 0; i < channels; i++) {
     sts[i] = rnnoise_create(model);
     rnnoise_set_param(sts[i], RNNOISE_PARAM_MAX_ATTENUATION, max_attenuation);
     rnnoise_set_param(sts[i], RNNOISE_PARAM_SAMPLE_RATE, sample_rate);
   }
-
+  
   while (1) {
-    fread(tmp, sizeof(short), channels * FRAME_SIZE, stdin);
-    if (feof(stdin)) break;
+    fread(tmp, sizeof(short), channels * FRAME_SIZE, f1);
+    if (feof(f1)) break;
 
     for (ci = 0; ci < channels; ci++) {
         for (i=0;i<FRAME_SIZE;i++) x[i] = tmp[i*channels+ci];
@@ -88,7 +90,7 @@ int main(int argc, char **argv) {
         for (i=0;i<FRAME_SIZE;i++) tmp[i*channels+ci] = x[i];
     }
 
-    if (!first) fwrite(tmp, sizeof(short), channels * FRAME_SIZE, stdout);
+    if (!first) fwrite(tmp, sizeof(short), channels * FRAME_SIZE, fout);
     first = 0;
   }
 
